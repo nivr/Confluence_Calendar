@@ -1,51 +1,46 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    https://shiny.posit.co/
-#
-
 library(shiny)
+library(dplyr)
+library(purrr)
+library(writexl)
 
-# Define UI for application that draws a histogram
+source("functions.R")
+
 ui <- fluidPage(
+  titlePanel("Confluence Calendar Aggregation Tool"),
 
-    # Application title
-    titlePanel("Old Faithful Geyser Data"),
+  sidebarLayout(
+    sidebarPanel(
+      numericInput(
+        "year_to_filter",
+        "Year to aggregate",
+        2024,
+        min = 2020,
+        max = NA,
+        step = 1
+      ),
+      fileInput("file1", "Upload Confluence iCalendar export", accept = ".ics"),
+      fileInput("file2", "Optionally upload names mapping", accept = ".csv"),
+    ),
 
-    # Sidebar with a slider input for number of bins 
-    sidebarLayout(
-        sidebarPanel(
-            sliderInput("bins",
-                        "Number of bins:",
-                        min = 1,
-                        max = 50,
-                        value = 30)
-        ),
+    mainPanel(tableOutput("contents"),
+              downloadButton("dl", "Download"))
+  ))
 
-        # Show a plot of the generated distribution
-        mainPanel(
-           plotOutput("distPlot")
-        )
-    )
-)
-
-# Define server logic required to draw a histogram
 server <- function(input, output) {
+  output$contents <- renderTable({
+    file <- input$file1
+    ext <<- tools::file_ext(file$datapath)
 
-    output$distPlot <- renderPlot({
-        # generate bins based on input$bins from ui.R
-        x    <- faithful[, 2]
-        bins <- seq(min(x), max(x), length.out = input$bins + 1)
+    req(file)
+    validate(need(ext == "ics", "Please upload an ics file"))
 
-        # draw the histogram with the specified number of bins
-        hist(x, breaks = bins, col = 'darkgray', border = 'white',
-             xlab = 'Waiting time to next eruption (in mins)',
-             main = 'Histogram of waiting times')
-    })
+    parsed_ics <<- parse_ics( input$file1$datapath, filter_year = input$year_to_filter, names_mapping_file = input$file2$datapath)
+    parsed_ics
+  })
+  output$dl <- downloadHandler(
+    filename = function() { "aggregation.xlsx"},
+    content = function(file) {write_xlsx(parsed_ics, path = file)}
+  )
 }
 
-# Run the application 
 shinyApp(ui = ui, server = server)
