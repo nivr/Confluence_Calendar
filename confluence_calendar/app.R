@@ -43,7 +43,7 @@ server <- function(input, output) {
   })
   output$dl <- downloadHandler(
     filename = function() { "aggregation.xlsx"},
-    content = function(file) {write_xlsx(parsed_ics, path = file)}
+    content = function(file) {write_xlsx(parse_ics( input$file1$datapath, filter_year = input$year_to_filter, names_mapping_file = input$file2$datapath), path = file)}
   )
 }
 
