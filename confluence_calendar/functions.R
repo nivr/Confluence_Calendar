@@ -49,7 +49,8 @@ expand_absences_over_months <- function(events_df) {
 parse_date <- function(date_string, date_type = "start") {
   if (length(grep("^VALUE=DATE:\\d*", date_string)) > 0) {
     date <- ymd(gsub("^VALUE=DATE:(\\d8)", "\\1", date_string))
-    if(date_type == "end") date <- date - 1
+    if (date_type == "end")
+      date <- date - 1
   }
   if (length(grep("^TZID=\\w*\\/\\w*:\\d{8}T\\d{6}", date_string)) > 0) {
     date <- ymd(gsub("^TZID=\\w*\\/\\w*:(\\d{8})T\\d{6}", "\\1", date_string))
@@ -57,7 +58,9 @@ parse_date <- function(date_string, date_type = "start") {
   date
 }
 
-parse_ics <- function(ics_file, names_mapping_file = NULL, filter_year = 2024) {
+parse_ics <- function(ics_file,
+                      names_mapping_file = NULL,
+                      filter_year = 2024) {
   x <- readr::read_lines(ics_file)
 
   organiser_indices <- which(grepl("^ORGANIZER", x))
@@ -95,9 +98,9 @@ parse_ics <- function(ics_file, names_mapping_file = NULL, filter_year = 2024) {
   event_indices <- which(grepl("^BEGIN:VEVENT", x))
   events <- data.frame()
   for (index in event_indices) {
-    event_end <- min(which(grepl("^END:VEVENT", tail(
-      x, length(x) - index
-    )))) + index
+    event_end <- min(which(grepl(
+      "^END:VEVENT", tail(x, length(x) - index)
+    ))) + index
     this_event <- x[index:event_end]
     created <- gsub(".*CREATED:(.*)", "\\1", this_event[which(grepl("^CREATED", this_event))])
     date_start <- gsub(".*DTSTART;(.*)", "\\1", this_event[which(grepl("^DTSTART", this_event))]) %>%
@@ -124,7 +127,13 @@ parse_ics <- function(ics_file, names_mapping_file = NULL, filter_year = 2024) {
             organizer = organizer,
             attendee = attendee,
             category = category,
-            half_day = any(str_detect(tolower(summary), c("half", "1/2", "afternoon", "morning")),str_detect(tolower(description), c("half", "1/2", "afternoon", "morning"))),
+            half_day = any(str_detect(
+              tolower(summary),
+              c("half", "1/2", "afternoon", "morning")
+            ), str_detect(
+              tolower(description),
+              c("half", "1/2", "afternoon", "morning")
+            )),
             created = created
           )
         )
@@ -134,48 +143,62 @@ parse_ics <- function(ics_file, names_mapping_file = NULL, filter_year = 2024) {
   events <- expand_absences_over_months(events)
 
   monthly_aggregation <- events %>%
-    group_by(attendee,
-             year = as.integer(year(date_start)),
-             month_num = month(date_start),
-             month_name = month(date_start, label = TRUE),
-             created) %>%
-    summarise(num_vacation_days = if_else(half_day, count_weekdays(date_start, date_end)/2, count_weekdays(date_start, date_end)),
-              .groups = "drop_last") %>%
+    group_by(
+      attendee,
+      year = as.integer(year(date_start)),
+      month_num = month(date_start),
+      month_name = month(date_start, label = TRUE),
+      created
+    ) %>%
+    summarise(
+      num_vacation_days = if_else(
+        half_day,
+        count_weekdays(date_start, date_end) / 2,
+        count_weekdays(date_start, date_end)
+      ),
+      .groups = "drop_last"
+    ) %>%
     summarise(num_vacation_days = sum(num_vacation_days)) %>%
     ungroup()
 
   wide_format <- monthly_aggregation %>%
-    complete(attendee, year, month_num = 1:12, fill = list(num_vacation_days = 0)) %>%
+    complete(attendee,
+             year,
+             month_num = 1:12,
+             fill = list(num_vacation_days = 0)) %>%
     mutate(month_name = month(month_num, label = TRUE, abbr = TRUE)) %>%
-    arrange(year,
-            month_num,
-            attendee) %>%
-    select(attendee,
-           year,
-           month_name,
-           num_vacation_days) %>%
-    pivot_wider(names_from = month_name, values_from = num_vacation_days, values_fill = 0) %>%
+    arrange(year, month_num, attendee) %>%
+    select(attendee, year, month_name, num_vacation_days) %>%
+    pivot_wider(
+      names_from = month_name,
+      values_from = num_vacation_days,
+      values_fill = 0
+    ) %>%
     arrange(attendee, year)
 
   print(filter_year)
 
-  if(!is.null(names_mapping_file)) {
-    names_mapping <- read_csv2(names_mapping_file)
-    excel_export <- wide_format %>%
-      left_join(names_mapping,
-                by = join_by(attendee == ical_name)) %>%
-      filter(year == filter_year,
-             !is.na(controlling_name)) %>%
-      select(name = controlling_name,
-             year,
-             all_of(seq(ymd(paste0(filter_year, '-01-01')), ymd(paste0(filter_year, '-12-31')), by='1 month') %>% month(label = TRUE)))
-  } else {
-    excel_export <- wide_format %>%
-      filter(year == filter_year) %>%
-      select(name = attendee,
-             year,
-             all_of(seq(ymd(paste0(filter_year, '-01-01')), ymd(paste0(filter_year, '-12-31')), by='1 month') %>% month(label = TRUE)))
-  }
+  if (!is.null(names_mapping_file)) {
+    names_mapping <<- read_csv2(names_mapping_file)
+    excel_export <<- wide_format %>%
+      select(attendee, year, all_of(seq(ymd(
+        paste0(filter_year, '-01-01')
+      ), ymd(
+        paste0(filter_year, '-12-31')
+      ), by = '1 month') %>% month(label = TRUE))) %>%
+      left_join(names_mapping, ., by = join_by(ical_name == attendee)) %>%
+      #select(-attendee) %>%
+      filter(year == filter_year)#,
+             #!is.na(controlling_name))
+             } else {
+               excel_export <- wide_format %>%
+                 filter(year == filter_year) %>%
+                 select(name = attendee, year, all_of(seq(ymd(
+                   paste0(filter_year, '-01-01')
+                 ), ymd(
+                   paste0(filter_year, '-12-31')
+                 ), by = '1 month') %>% month(label = TRUE)))
+             }
 
   excel_export
-}
+  }
