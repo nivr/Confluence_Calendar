@@ -9,6 +9,13 @@ library(readr)
 
 source("functions.R")
 
+# Workaround for Chromium Issue 468227
+downloadButton <- function(...) {
+  tag <- shiny::downloadButton(...)
+  tag$attribs$download <- NULL
+  tag
+}
+
 ui <- fluidPage(
   titlePanel("Confluence Calendar Aggregation Tool"),
 
