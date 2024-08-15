@@ -189,16 +189,16 @@ parse_ics <- function(ics_file,
       left_join(names_mapping, ., by = join_by(ical_name == attendee)) %>%
       #select(-attendee) %>%
       filter(year == filter_year)#,
-             #!is.na(controlling_name))
-             } else {
-               excel_export <- wide_format %>%
-                 filter(year == filter_year) %>%
-                 select(name = attendee, year, all_of(seq(ymd(
-                   paste0(filter_year, '-01-01')
-                 ), ymd(
-                   paste0(filter_year, '-12-31')
-                 ), by = '1 month') %>% month(label = TRUE)))
-             }
+    #!is.na(controlling_name))
+  } else {
+    excel_export <- wide_format %>%
+      filter(year == filter_year) %>%
+      select(name = attendee, year, all_of(seq(ymd(
+        paste0(filter_year, '-01-01')
+      ), ymd(
+        paste0(filter_year, '-12-31')
+      ), by = '1 month') %>% month(label = TRUE)))
+  }
 
   excel_export
-  }
+}
