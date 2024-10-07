@@ -2,12 +2,38 @@ clean_name <- function(dirty_name) {
   gsub("\\s\\(Unlicensed\\)", "", dirty_name)
 }
 
-count_weekdays <- function(start_date, end_date) {
-  date_seq <- seq(ymd(start_date), ymd(end_date), by = "days")
+# count_weekdays <- function(start_date, end_date) {
+#   date_seq <- mapply(function(start, end) {
+#     seq(ymd(start), ymd(end), by = "days")
+#   }, start_date, end_date, SIMPLIFY = FALSE) %>%
+#     do.call(c, .) %>%
+#     unique()
+#
+#   weekdays_only <- date_seq[!wday(date_seq, week_start = 1) %in% c(6, 7)]
+#
+#   length(weekdays_only)
+# }
 
-  weekdays_only <- date_seq[!wday(date_seq, week_start = 1) %in% c(6, 7)]
+count_weekdays <- function(start_date, end_date, half_day) {
 
-  length(weekdays_only)
+  full_days_list <- purrr::map2(ymd(start_date[!half_day]),
+                                ymd(end_date[!half_day]),
+                                ~ seq(.x, .y, by = "day")) %>%
+    do.call(c, .) %>%
+    unique()
+  full_days_list <- full_days_list[!wday(full_days_list, week_start = 1) %in% c(6, 7)]
+
+  half_days_list <- purrr::map2(ymd(start_date[half_day]),
+                                ymd(end_date[half_day]),
+                                ~ seq(.x, .y, by = "day")) %>%
+    do.call(c, .) %>%
+    unique()
+  half_days_list <- half_days_list[!wday(half_days_list, week_start = 1) %in% c(6, 7)]
+
+  non_overlapping_half_days <- setdiff(half_days_list,
+                                       full_days_list)
+
+  length(full_days_list) + 0.5 * length(half_days_list)
 }
 
 split_row <- function(row) {
@@ -61,7 +87,7 @@ parse_date <- function(date_string, date_type = "start") {
 parse_ics <- function(ics_file,
                       names_mapping_file = NULL,
                       filter_year = 2024) {
-  x <- readr::read_lines(ics_file)
+  x <<- readr::read_lines(ics_file)
 
   organiser_indices <- which(grepl("^ORGANIZER", x))
   lines_removed <- 0
@@ -124,7 +150,9 @@ parse_ics <- function(ics_file,
             date_end = date_end,
             description = description,
             summary = summary,
-            organizer = organizer,
+            organizer = ifelse(length(organizer) == 0,
+                           "",
+                           organizer),
             attendee = attendee,
             category = category,
             half_day = any(str_detect(
@@ -151,11 +179,7 @@ parse_ics <- function(ics_file,
       created
     ) %>%
     summarise(
-      num_vacation_days = if_else(
-        half_day,
-        count_weekdays(date_start, date_end) / 2,
-        count_weekdays(date_start, date_end)
-      ),
+      num_vacation_days = count_weekdays(date_start, date_end, half_day),
       .groups = "drop_last"
     ) %>%
     summarise(num_vacation_days = sum(num_vacation_days)) %>%
@@ -187,9 +211,9 @@ parse_ics <- function(ics_file,
         paste0(filter_year, '-12-31')
       ), by = '1 month') %>% month(label = TRUE))) %>%
       left_join(names_mapping, ., by = join_by(ical_name == attendee)) %>%
-      #select(-attendee) %>%
-      filter(year == filter_year)#,
-    #!is.na(controlling_name))
+      mutate(year = replace_na(year, filter_year)) %>%
+      replace(is.na(.), 0) %>%
+      filter(year == filter_year | is.na(year))
   } else {
     excel_export <- wide_format %>%
       filter(year == filter_year) %>%
